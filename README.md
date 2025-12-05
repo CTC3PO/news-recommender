@@ -21,7 +21,8 @@ ML-powered personalized news recommender using embeddings and ranking.
 pip install -r requirements.txt
 
 # Download and process data
-python data/download_data.py
+download data from: https://www.kaggle.com/datasets/arashnic/mind-news-dataset
+
 python data/feature_engineering.py
 
 # Train models
