@@ -2,17 +2,60 @@
 
 ML-powered personalized news recommender using embeddings and ranking.
 
+## Project Overview: Real-Time News Recommendation Engine
+Build a production-grade system that recommends personalized news articles using embeddings, retrieval, and LLMs, with real-time inference and A/B testing capabilities.
+
 ## Features
 - Semantic search with sentence transformers
 - ML-based ranking
 - Personalized recommendations
 - Real-time inference
+  
+## System Architecture ##
 
-## Tech Stack
-- SentenceTransformers for embeddings
-- FAISS for vector search
-- Scikit-learn for ranking
-- FastAPI + Streamlit
+- Data Pipeline (Batch + Streaming)
+- Embedding & Retrieval System
+- LLM-Powered Ranking & Personalization
+Model Serving Infrastructure
+Monitoring & Experimentation Framework
+
+## Technical Implementation ##
+### 1. Data Pipeline ###
+Dataset: MIND (Microsoft News Dataset) from Kaggle
+
+160k+ news articles with user interaction history
+Rich metadata (categories, entities, abstracts)
+
+**Tools:**
+
+- Batch processing: Apache Spark (PySpark) for historical data
+- Streaming: Kafka for real-time user events
+- Storage: Feature store (Feast) + Vector DB (Weaviate/Milvus)
+
+### 2. Embedding & Retrieval System ###
+Models from HuggingFace:
+
+- sentence-transformers/all-MiniLM-L6-v2 - Fast article embeddings
+- BAAI/bge-large-en-v1.5 - High-quality retrieval embeddings
+
+### 3. LLM-Powered Ranking ###
+Models:
+
+Base ranker: Fine-tune distilbert-base-uncased on MIND click data
+LLM re-ranker: Use meta-llama/Llama-3.2-1B-Instruct for contextual ranking
+
+### 4. Model Serving Infrastructure ###
+Tech Stack:
+
+- API: FastAPI
+- Model Serving:
+
+   -  TorchServe for PyTorch models
+   -  vLLM for LLM inference optimization
+
+
+- Caching: Redis for frequently accessed embeddings
+- Load Balancing: Nginx
 
 ## Quick Start
 
