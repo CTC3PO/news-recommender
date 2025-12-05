@@ -35,3 +35,70 @@ streamlit run app/streamlit_app.py  # Terminal 2
 
 ## Dataset
 Microsoft MIND (News) Dataset - 50K+ articles, 50K user behaviors
+
+## 4. **Complete Interaction Flow**
+```
+START
+  ↓
+┌─────────────────────────┐
+│ User opens Streamlit app │
+│ http://localhost:8501   │
+└──────────┬──────────────┘
+           ↓
+┌─────────────────────────┐
+│ Landing page shows:     │
+│ - How it works          │
+│ - Tech stack            │
+│ - Dataset stats         │
+└──────────┬──────────────┘
+           ↓
+┌─────────────────────────┐
+│ User chooses mode:      │
+│ ○ Search                │
+│ ○ Personalized          │
+└──────────┬──────────────┘
+           ↓
+     ┌─────┴─────┐
+     │           │
+     ↓           ↓
+┌─────────┐ ┌──────────┐
+│ Search  │ │Personalized│
+│ Mode    │ │  Mode    │
+└────┬────┘ └────┬─────┘
+     │           │
+     ↓           ↓
+Enter query  Select user
+     │           │
+     └─────┬─────┘
+           ↓
+┌─────────────────────────┐
+│ Adjust number of results│
+│ (slider: 5-20)          │
+└──────────┬──────────────┘
+           ↓
+┌─────────────────────────┐
+│ Click "Get Recommendations"│
+└──────────┬──────────────┘
+           ↓
+┌─────────────────────────┐
+│ API call to FastAPI     │
+│ /recommend endpoint     │
+└──────────┬──────────────┘
+           ↓
+┌─────────────────────────┐
+│ Display results:        │
+│ - Metrics (avg score)   │
+│ - Article cards         │
+│   • Title               │
+│   • Category            │
+│   • Abstract            │
+│   • Stats (CTR, views)  │
+│   • ML Score            │
+└──────────┬──────────────┘
+           ↓
+┌─────────────────────────┐
+│ User can:               │
+│ - Change settings       │
+│ - Get new recommendations│
+│ - Switch modes          │
+└─────────────────────────┘
