@@ -78,27 +78,25 @@ LLM re-ranker: Use meta-llama/Llama-3.2-1B-Instruct for contextual ranking
 ## Quick Start
 
 \`\`\bash
-# Install dependencies
+## Install dependencies
 pip install -r requirements.txt
 
-# Download and process data
+##  Download and process data
 download data from: https://www.kaggle.com/datasets/arashnic/mind-news-dataset
 
 python data/feature_engineering.py
 
-# Train models
+##  Train models
 python models/embeddings.py
 
 python models/train_ranker.py
 
-# Run application
+##  Run application
 python app/api.py  # Terminal 1
 
 streamlit run app/streamlit_app.py  # Terminal 2
 \`\`\`
 
-## Dataset
-Microsoft MIND (News) Dataset - 50K+ articles, 50K user behaviors
 
 ##  **User Interaction Flow**
 ```
