@@ -11,8 +11,6 @@ Build a production-grade system that recommends personalized news articles using
 - Personalized recommendations
 - Real-time inference
 
---------------------------------------------------------
-
 ## System Architecture ##
 
 - Data Pipeline (Batch + Streaming)
@@ -20,6 +18,8 @@ Build a production-grade system that recommends personalized news articles using
 - LLM-Powered Ranking & Personalization
 Model Serving Infrastructure
 Monitoring & Experimentation Framework
+
+--------------------------------------------------------
 
 ## Technical Implementation ##
 ### 1. Data Pipeline ###
