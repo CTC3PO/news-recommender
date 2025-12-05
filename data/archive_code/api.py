@@ -2,41 +2,19 @@
 FastAPI backend for news recommendation system
 Provides REST API for personalized recommendations
 """
-from typing import List, Optional
-import numpy as np
-import pandas as pd
-from pydantic import BaseModel, Field
-from fastapi.middleware.cors import CORSMiddleware
+from models.train_ranker import SimpleRanker
+from models.embeddings import EmbeddingEngine
 from fastapi import FastAPI, HTTPException, Query
-import sys
-import os
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
+import pandas as pd
+import numpy as np
 from pathlib import Path
+import sys
+from typing import List, Optional
 
-# Add the project root to Python path
-project_root = Path(__file__).parent.parent
-sys.path.append(str(project_root))
-
-
-# Try to import models with error handling
-try:
-    from models.train_ranker import SimpleRanker
-    from models.embeddings import EmbeddingEngine
-    MODELS_LOADED = True
-except ImportError as e:
-    print(f"Warning: Could not import models: {e}")
-    print("API will run in limited mode (static data only)")
-    MODELS_LOADED = False
-    # Define dummy classes if imports fail
-
-    class SimpleRanker:
-        def __init__(self): pass
-        def load(self, path): pass
-        def predict(self, features_df): return np.zeros(len(features_df))
-
-    class EmbeddingEngine:
-        def __init__(self): pass
-        def load(self, path): pass
-        def search(self, query_emb, k): return []
+# Add parent directory to path
+sys.path.append(str(Path(__file__).parent.parent))
 
 
 # Initialize FastAPI app
@@ -108,50 +86,24 @@ async def load_models():
     print("="*60)
 
     try:
+        # Load embedding engine
+        print("\n1. Loading embedding engine...")
+        embedding_engine = EmbeddingEngine()
+        embedding_engine.load("data/processed")
+        print("   ✓ Embeddings ready")
+
+        # Load ranker
+        print("\n2. Loading ranking model...")
+        ranker = SimpleRanker()
+        ranker.load("models/ranker.pkl")
+        print("   ✓ Ranker ready")
+
         # Load data
-        print("\n1. Loading datasets...")
-        news_path = Path("data/processed/news_features.parquet")
-        user_path = Path("data/processed/user_features.parquet")
-
-        if not news_path.exists():
-            print(f"   ❌ News features not found: {news_path}")
-            # Load raw data as fallback
-            news_df = load_raw_news()
-        else:
-            news_df = pd.read_parquet(news_path)
-            print(f"   ✓ Loaded {len(news_df):,} articles")
-
-        if not user_path.exists():
-            print(f"   ❌ User features not found: {user_path}")
-            user_df = pd.DataFrame(columns=['user_id'])
-        else:
-            user_df = pd.read_parquet(user_path)
-            print(f"   ✓ Loaded {len(user_df):,} users")
-
-        # Load embedding engine if available
-        if MODELS_LOADED:
-            print("\n2. Loading embedding engine...")
-            embedding_engine = EmbeddingEngine()
-            # Check if embeddings exist
-            embedding_path = Path("data/processed/article_embeddings.npy")
-            if embedding_path.exists():
-                embedding_engine.load("data/processed")
-                print("   ✓ Embeddings ready")
-            else:
-                print("   ⚠️  Embeddings not found, using fallback")
-                embedding_engine = None
-
-        # Load ranker if available
-        if MODELS_LOADED:
-            print("\n3. Loading ranking model...")
-            ranker_path = Path("models/ranker.pkl")
-            if ranker_path.exists():
-                ranker = SimpleRanker()
-                ranker.load("models/ranker.pkl")
-                print("   ✓ Ranker ready")
-            else:
-                print("   ⚠️  Ranker model not found, using popularity ranking")
-                ranker = None
+        print("\n3. Loading datasets...")
+        news_df = pd.read_parquet("data/processed/news_features.parquet")
+        user_df = pd.read_parquet("data/processed/user_features.parquet")
+        print(f"   ✓ Loaded {len(news_df):,} articles")
+        print(f"   ✓ Loaded {len(user_df):,} users")
 
         print("\n" + "="*60)
         print("✅ API READY")
@@ -162,31 +114,7 @@ async def load_models():
 
     except Exception as e:
         print(f"\n❌ Error loading models: {e}")
-        # Continue anyway with limited functionality
-        print("⚠️  Starting API with limited functionality")
-
-
-def load_raw_news():
-    """Load raw news data if processed data not available"""
-    try:
-        news_path = Path("data/raw/train/news.tsv")
-        if news_path.exists():
-            columns = [
-                'news_id', 'category', 'subcategory', 'title',
-                'abstract', 'url', 'title_entities', 'abstract_entities'
-            ]
-            df = pd.read_csv(news_path, sep='\t', header=None,
-                             names=columns, on_bad_lines='warn')
-            df = df[['news_id', 'category', 'subcategory', 'title', 'abstract']]
-            # Add dummy features
-            df['ctr'] = 0.0
-            df['impressions'] = 0
-            return df
-    except Exception:
-        pass
-
-    # Return empty dataframe as last resort
-    return pd.DataFrame(columns=['news_id', 'category', 'title', 'abstract', 'ctr', 'impressions'])
+        raise
 
 
 @app.get("/", response_model=dict)
@@ -195,7 +123,6 @@ def root():
     return {
         "message": "News Recommender API",
         "status": "running",
-        "models_available": MODELS_LOADED,
         "docs": "/docs",
         "endpoints": {
             "health": "/health",
@@ -228,21 +155,12 @@ def get_recommendations(request: RecommendRequest):
     2. Search (query): Content-based retrieval
     """
     try:
-        # Validate we have data
-        if news_df is None or len(news_df) == 0:
-            raise HTTPException(
-                status_code=503, detail="No articles available")
-
         # Validate input
         if not request.user_id and not request.query:
             raise HTTPException(
                 status_code=400,
                 detail="Must provide either user_id or query"
             )
-
-        # If no models available, use simple popularity ranking
-        if embedding_engine is None or ranker is None:
-            return get_popular_recommendations(request)
 
         # Step 1: Retrieve candidates using embeddings
         if request.query:
@@ -251,18 +169,17 @@ def get_recommendations(request: RecommendRequest):
             mode = "search"
         else:
             # Personalized: use user's top category as query
-            if user_df is None or request.user_id not in user_df['user_id'].values:
-                # Return popular articles for unknown users
-                return get_popular_recommendations(request)
+            user_profile = user_df[user_df['user_id'] == request.user_id]
 
-            user_profile = user_df[user_df['user_id']
-                                   == request.user_id].iloc[0]
-            top_category = user_profile['top_category']
+            if len(user_profile) == 0:
+                raise HTTPException(status_code=404, detail="User not found")
+
+            top_category = user_profile.iloc[0]['top_category']
             query_text = f"{top_category} news"
             query_emb = embedding_engine.model.encode(query_text)
             mode = "personalized"
 
-        # Retrieve candidates
+        # Retrieve more candidates than needed for re-ranking
         candidates = embedding_engine.search(query_emb, k=request.k * 3)
 
         # Get full article information
@@ -271,23 +188,24 @@ def get_recommendations(request: RecommendRequest):
             candidate_ids)].copy()
 
         # Step 2: Re-rank with ML model (if personalized)
-        if mode == "personalized" and ranker is not None and len(candidate_articles) > 0:
+        if mode == "personalized" and len(candidate_articles) > 0:
+            user_profile = user_df[user_df['user_id']
+                                   == request.user_id].iloc[0]
+
             # Extract features for all candidates
             features = []
             for _, article in candidate_articles.iterrows():
                 feat = ranker._extract_features(user_profile, article)
                 features.append(feat)
 
-            if features:
-                features_df = pd.DataFrame(features)
-                scores = ranker.predict(features_df)
-                candidate_articles['ml_score'] = scores
-                candidate_articles = candidate_articles.sort_values(
-                    'ml_score', ascending=False)
-            else:
-                candidate_articles['ml_score'] = 0.5
+            features_df = pd.DataFrame(features)
+            scores = ranker.predict(features_df)
+
+            candidate_articles['ml_score'] = scores
+            candidate_articles = candidate_articles.sort_values(
+                'ml_score', ascending=False)
         else:
-            # For search mode or no ranker, use embedding similarity as score
+            # For search mode, use embedding similarity as score
             candidate_articles['ml_score'] = 0.5
 
         # Step 3: Format and return top-k
@@ -313,39 +231,9 @@ def get_recommendations(request: RecommendRequest):
             status_code=500, detail=f"Error generating recommendations: {str(e)}")
 
 
-def get_popular_recommendations(request: RecommendRequest):
-    """Fallback: return popular articles sorted by impressions"""
-    if news_df is None or len(news_df) == 0:
-        raise HTTPException(status_code=503, detail="No articles available")
-
-    # Sort by impressions (or use random if no impressions)
-    if 'impressions' in news_df.columns:
-        sorted_news = news_df.sort_values('impressions', ascending=False)
-    else:
-        sorted_news = news_df.sample(frac=1, random_state=42)
-
-    results = []
-    for _, row in sorted_news.head(request.k).iterrows():
-        results.append(Article(
-            news_id=row['news_id'],
-            title=row['title'],
-            category=row['category'],
-            subcategory=row.get('subcategory'),
-            abstract=row.get('abstract') or "",
-            score=0.0,
-            ctr=float(row.get('ctr', 0)),
-            impressions=int(row.get('impressions', 0))
-        ))
-
-    return results
-
-
 @app.get("/users", response_model=dict)
 def list_users(limit: int = Query(20, ge=1, le=100)):
     """Get list of sample user IDs"""
-    if user_df is None or len(user_df) == 0:
-        return {"users": [], "total_users": 0, "returned": 0}
-
     sample_users = user_df['user_id'].head(limit).tolist()
     return {
         "users": sample_users,
@@ -357,9 +245,6 @@ def list_users(limit: int = Query(20, ge=1, le=100)):
 @app.get("/user/{user_id}", response_model=UserInfo)
 def get_user_info(user_id: str):
     """Get user profile information"""
-    if user_df is None or len(user_df) == 0:
-        raise HTTPException(status_code=404, detail="No user data available")
-
     user = user_df[user_df['user_id'] == user_id]
 
     if len(user) == 0:
@@ -369,18 +254,15 @@ def get_user_info(user_id: str):
 
     return UserInfo(
         user_id=user['user_id'],
-        articles_read=int(user.get('num_articles_read', 0)),
-        top_category=user.get('top_category', 'unknown'),
-        category_diversity=float(user.get('category_diversity', 0))
+        articles_read=int(user['num_articles_read']),
+        top_category=user['top_category'],
+        category_diversity=float(user['category_diversity'])
     )
 
 
 @app.get("/article/{news_id}", response_model=Article)
 def get_article(news_id: str):
     """Get article details"""
-    if news_df is None or len(news_df) == 0:
-        raise HTTPException(status_code=404, detail="No articles available")
-
     article = news_df[news_df['news_id'] == news_id]
 
     if len(article) == 0:
@@ -403,9 +285,6 @@ def get_article(news_id: str):
 @app.get("/categories", response_model=dict)
 def list_categories():
     """Get all categories with article counts"""
-    if news_df is None or len(news_df) == 0:
-        return {"categories": {}, "total": 0}
-
     category_counts = news_df['category'].value_counts().to_dict()
     return {
         "categories": category_counts,
