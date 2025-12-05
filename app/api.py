@@ -11,6 +11,10 @@ from fastapi import FastAPI, HTTPException, Query
 import sys
 import os
 from pathlib import Path
+from datetime import datetime, timedelta
+from typing import Dict, List
+import json
+from fastapi import Depends
 
 # Add the project root to Python path
 project_root = Path(__file__).parent.parent
@@ -411,6 +415,261 @@ def list_categories():
         "categories": category_counts,
         "total": len(category_counts)
     }
+
+# Add these to your API
+
+
+class UserInteraction(BaseModel):
+    user_id: str
+    article_id: str
+    action: str  # 'click', 'like', 'share', 'read'
+    timestamp: str
+
+
+@app.post("/log_interaction")
+def log_interaction(interaction: UserInteraction):
+    """Log user interactions for real-time learning"""
+    # Store in database (Redis/SQLite for demo)
+    # Update user profile in real-time
+    # Return updated recommendations
+
+
+@app.get("/trending_now")
+def get_trending_now(limit: int = 10):
+    """Get currently trending articles based on recent clicks"""
+    # Calculate trending based on last hour/day
+    # Real-time popularity ranking
+
+
+class UserInteraction(BaseModel):
+    user_id: str
+    article_id: str
+    action: str  # 'click', 'like', 'dislike', 'read', 'share'
+    timestamp: str = Field(default_factory=lambda: datetime.now().isoformat())
+    duration: Optional[float] = None  # Reading time in seconds
+
+
+class TrendingRequest(BaseModel):
+    time_window: str = Field("1h", description="Time window: 1h, 24h, 7d")
+    limit: int = Field(10, ge=1, le=50)
+
+
+# Add global variables for real-time tracking
+user_interactions = []  # In production, use Redis or database
+trending_cache = {}
+last_trending_update = None
+
+# Add these endpoints AFTER your existing endpoints
+
+
+@app.post("/log_interaction")
+async def log_interaction(interaction: UserInteraction):
+    """
+    Log user interaction for real-time learning
+    """
+    global user_interactions
+
+    # Store interaction
+    user_interactions.append(interaction.dict())
+
+    # Keep only last 10,000 interactions (for demo)
+    if len(user_interactions) > 10000:
+        user_interactions = user_interactions[-10000:]
+
+    # In production: Update user profile in real-time
+    # update_user_profile(interaction.user_id, interaction)
+
+    return {
+        "status": "logged",
+        "interaction_id": len(user_interactions),
+        "message": "Interaction recorded successfully"
+    }
+
+
+@app.get("/trending", response_model=List[Article])
+def get_trending(request: TrendingRequest = Depends()):
+    """
+    Get trending articles based on recent interactions
+    """
+    global trending_cache, last_trending_update
+
+    # Cache trending for 5 minutes
+    cache_key = f"{request.time_window}_{request.limit}"
+    current_time = datetime.now()
+
+    if (last_trending_update and
+        (current_time - last_trending_update).seconds < 300 and
+            cache_key in trending_cache):
+        return trending_cache[cache_key]
+
+    # Calculate time window
+    if request.time_window == "1h":
+        time_delta = timedelta(hours=1)
+    elif request.time_window == "24h":
+        time_delta = timedelta(days=1)
+    else:  # 7d
+        time_delta = timedelta(days=7)
+
+    cutoff_time = current_time - time_delta
+
+    # Filter recent interactions
+    recent_interactions = [
+        i for i in user_interactions
+        if datetime.fromisoformat(i['timestamp']) > cutoff_time
+    ]
+
+    # Calculate trending scores
+    article_scores = {}
+    for interaction in recent_interactions:
+        article_id = interaction['article_id']
+        if article_id not in article_scores:
+            article_scores[article_id] = {
+                'clicks': 0,
+                'likes': 0,
+                'reads': 0,
+                'total_score': 0,
+                'last_interaction': interaction['timestamp']
+            }
+
+        # Weight different actions
+        weights = {
+            'click': 1,
+            'like': 3,
+            'read': 2,
+            'share': 5
+        }
+
+        article_scores[article_id]['total_score'] += weights.get(
+            interaction['action'], 1)
+        article_scores[article_id][f"{interaction['action']}s"] += 1
+
+    # Get article details and calculate trending score
+    trending_articles = []
+    for article_id, scores in sorted(
+        article_scores.items(),
+        key=lambda x: x[1]['total_score'],
+        reverse=True
+    )[:request.limit]:
+
+        # Get article info
+        article_info = news_df[news_df['news_id'] == article_id]
+        if len(article_info) > 0:
+            article = article_info.iloc[0]
+
+            # Calculate velocity (recent popularity)
+            recent_hour = datetime.now() - timedelta(hours=1)
+            recent_interactions_count = len([
+                i for i in recent_interactions
+                if i['article_id'] == article_id and
+                datetime.fromisoformat(i['timestamp']) > recent_hour
+            ])
+
+            trending_score = scores['total_score'] * \
+                (1 + recent_interactions_count * 0.1)
+
+            trending_articles.append(Article(
+                news_id=article_id,
+                title=article['title'],
+                category=article['category'],
+                subcategory=article.get('subcategory'),
+                abstract=article.get('abstract') or "",
+                score=float(trending_score / 100),  # Normalize
+                ctr=float(article.get('ctr', 0)),
+                impressions=int(article.get('impressions', 0))
+            ))
+
+    # Cache results
+    trending_cache[cache_key] = trending_articles
+    last_trending_update = current_time
+
+    return trending_articles
+
+
+@app.get("/user/{user_id}/interactions")
+def get_user_interactions(user_id: str, limit: int = 20):
+    """
+    Get user's interaction history
+    """
+    user_ints = [
+        i for i in user_interactions
+        if i['user_id'] == user_id
+    ][-limit:]  # Get most recent
+
+    return {
+        "user_id": user_id,
+        "total_interactions": len(user_ints),
+        "interactions": user_ints
+    }
+
+
+@app.get("/article/{news_id}/stats")
+def get_article_stats(news_id: str):
+    """
+    Get real-time statistics for an article
+    """
+    article_ints = [i for i in user_interactions if i['article_id'] == news_id]
+
+    # Calculate stats
+    stats = {
+        "total_interactions": len(article_ints),
+        "clicks": sum(1 for i in article_ints if i['action'] == 'click'),
+        "likes": sum(1 for i in article_ints if i['action'] == 'like'),
+        "reads": sum(1 for i in article_ints if i['action'] == 'read'),
+        "shares": sum(1 for i in article_ints if i['action'] == 'share'),
+        "first_seen": min((i['timestamp'] for i in article_ints), default=None),
+        "last_seen": max((i['timestamp'] for i in article_ints), default=None)
+    }
+
+    # Calculate engagement rate
+    if article_ints:
+        # In production, you'd use actual impression data
+        stats["estimated_engagement"] = len(article_ints) / 100  # Simplified
+
+    return stats
+
+# Add a new recommendation mode
+
+
+@app.post("/recommend/explore")
+def explore_recommendations(request: RecommendRequest):
+    """
+    Exploration recommendations - shows diverse content
+    """
+    if not request.user_id:
+        raise HTTPException(400, "User ID required for exploration")
+
+    # Get user's usual categories
+    user_profile = user_df[user_df['user_id'] == request.user_id]
+    if len(user_profile) == 0:
+        raise HTTPException(404, "User not found")
+
+    usual_categories = [user_profile.iloc[0]['top_category']]
+    if user_profile.iloc[0]['second_category']:
+        usual_categories.append(user_profile.iloc[0]['second_category'])
+
+    # Get articles NOT in user's usual categories
+    diverse_articles = news_df[~news_df['category'].isin(usual_categories)]
+
+    if len(diverse_articles) == 0:
+        diverse_articles = news_df
+
+    # Sample diverse articles
+    sample = diverse_articles.sample(min(request.k, len(diverse_articles)))
+
+    results = []
+    for _, row in sample.iterrows():
+        results.append(Article(
+            news_id=row['news_id'],
+            title=row['title'],
+            category=row['category'],
+            subcategory=row.get('subcategory'),
+            abstract=row.get('abstract') or "",
+            score=0.5,  # Exploration score
+            ctr=float(row.get('ctr', 0)),
+            impressions=int(row.get('impressions', 0))
+        ))
+
+    return results
 
 
 if __name__ == "__main__":

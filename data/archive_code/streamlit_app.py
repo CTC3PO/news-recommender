@@ -8,7 +8,6 @@ import json
 from datetime import datetime
 import time
 import random
-from fastapi import Depends
 
 # Page configuration
 st.set_page_config(
