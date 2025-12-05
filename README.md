@@ -39,7 +39,7 @@ streamlit run app/streamlit_app.py  # Terminal 2
 ## Dataset
 Microsoft MIND (News) Dataset - 50K+ articles, 50K user behaviors
 
-##  **Complete Interaction Flow**
+##  **User Interaction Flow**
 ```
 START
   ↓
