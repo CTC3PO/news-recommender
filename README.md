@@ -27,10 +27,12 @@ python data/feature_engineering.py
 
 # Train models
 python models/embeddings.py
+
 python models/train_ranker.py
 
 # Run application
 python app/api.py  # Terminal 1
+
 streamlit run app/streamlit_app.py  # Terminal 2
 \`\`\`
 
