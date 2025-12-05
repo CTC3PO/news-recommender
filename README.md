@@ -10,7 +10,9 @@ Build a production-grade system that recommends personalized news articles using
 - ML-based ranking
 - Personalized recommendations
 - Real-time inference
-  
+
+--------------------------------------------------------
+
 ## System Architecture ##
 
 - Data Pipeline (Batch + Streaming)
@@ -45,7 +47,7 @@ Base ranker: Fine-tune distilbert-base-uncased on MIND click data
 LLM re-ranker: Use meta-llama/Llama-3.2-1B-Instruct for contextual ranking
 
 ### 4. Model Serving Infrastructure ###
-Tech Stack:
+**Tech Stack:**
 
 - API: FastAPI
 - Model Serving:
@@ -56,6 +58,22 @@ Tech Stack:
 
 - Caching: Redis for frequently accessed embeddings
 - Load Balancing: Nginx
+
+
+### 5. Monitoring & Experimentation ###
+**Metrics to Track:**
+
+- Model Performance: Click-through rate (CTR), diversity, coverage
+- System Health: Latency, throughput, error rates
+- Data Quality: Feature drift, embedding distribution shifts
+
+**Tools:**
+
+- Monitoring: Prometheus + Grafana
+- ML Observability: Evidently AI for drift detection
+- Logging: ELK stack (Elasticsearch, Logstash, Kibana)
+
+--------------------------------------------------------
 
 ## Quick Start
 
